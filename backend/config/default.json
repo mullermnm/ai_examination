@@ -1,0 +1,26 @@
+{
+  "secret_key": "3weplg!!2kdc",
+  "logo": "",
+  "Server_Port": 9090,
+  "encryption_key": "12dcafgtx#vmwp",
+  "static_file_routes": [
+    "/v1/api/logo",
+    "/v1/api/photo",
+    "/v1/api/signature"
+  ],
+  "unprotected_routes": [
+    "/api/users/signin"
+  ],
+  "log_port": 39019,
+  "paymentPushNotificationUrl": "http://13.51.156.176/cbebirrussd/c2bonlinepaymentrequest",
+  "log_ip": "10.10.0.123",
+  "db": {
+    "name": "inventory-test",
+    "port": 27017,
+    "host": "localhost"
+  },
+  "redis": {
+    "host": "127.0.0.1",
+    "port": 6379
+  }
+}

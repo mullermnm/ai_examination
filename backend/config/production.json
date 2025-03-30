@@ -1,0 +1,31 @@
+{
+  "secret_key": "3weplg!!2kdc",
+  "logo": "",
+  "Server_Port": 7090,
+  "encryption_key": "12dcafgtx#vmwp",
+  "static_file_routes": [
+    "/v1/api/logo",
+    "/v1/api/photo",
+    "/v1/api/signature"
+  ],
+  "unprotected_routes": [
+    "/v1/api/credential/signin",
+    "/v1/api/organization/add",
+    "/v1/api/admin/signin",
+    "/v1/api/config/localization/en",
+    "/v1/api/config/localization/tg",
+    "/v1/api/series",
+    "/v1/api/series/getsequence"
+  ],
+  "log_port": 39019,
+  "log_ip": "10.10.0.123",
+  "db": {
+    "name": "inventory",
+    "port": 27017,
+    "host": "localhost"
+  },
+  "redis": {
+    "host": "127.0.0.1",
+    "port": 6379
+  }
+}

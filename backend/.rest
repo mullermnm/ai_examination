@@ -1,0 +1,18 @@
+GET http://localhost:7090/api/test
+###
+POST  http://localhost:7090/api/test
+
+Content-Type: application/json
+
+{
+    "name":"Beli"
+}
+
+###
+PUT   http://localhost:7090/api/test/630e96f45b910d9e97a46472
+Content-Type: application/json
+Authorization: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjYyYjAyMTE0MjRhM2Y3OWVkNGQ0NTU4NCIsIm5hbWUiOiJhZG1pbi1NSC0wMTUiLCJvcmdJZCI6IjYyYjAyMTE0MjRhM2Y3OWVkNGQ0NTU4MCIsIm9mZmljZSI6IjYyYjAyMTE0MjRhM2Y3OWVkNGQ0NTU4MSIsIm9mZmljZV90eXBlIjoiSFEiLCJpYXQiOjE2NjE5NDA0MzIsImV4cCI6MTY2MTk0MzEzMn0.T6Om26OApWaYFDGhkXm6IL8erb9QWbndRU3Xt85HZqM
+
+{
+    "name":"test"
+}
