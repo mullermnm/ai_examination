@@ -35,4 +35,10 @@ router.patch('/:submissionId/grade',
     examSubmissionsController.gradeSubmission
 );
 
+// Delete a submission (teacher only)
+router.delete('/:submissionId',
+    teacherAuth(),
+    examSubmissionsController.deleteSubmission
+);
+
 export default router;
