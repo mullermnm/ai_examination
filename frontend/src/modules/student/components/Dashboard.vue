@@ -13,6 +13,10 @@
 
     <!-- Main -->
     <main class="main-content" role="main" aria-live="polite">
+      <!-- RIVE AVATAR CENTER -->
+      <section class="avatar-wrapper">
+        <RiveAvatar />
+      </section>
       <!-- Welcome -->
       <section
         ref="welcomeMessage"
@@ -21,7 +25,10 @@
         aria-label="Welcome message"
       >
         <h2 class="visually-hidden">Welcome Message</h2>
-        <p v-if="!hasInteracted">Hello, {{ studentName }} — say "Take Exam" to start, or press Enter.</p>
+        <p v-if="!hasInteracted">
+          <span class="highlight-text" :data-text="'Hello'">Hello</span>, 
+          {{ studentName }} — say "Take Exam" to start, or press Enter.
+        </p>
       </section>
 
       <!-- Loading / Error -->
@@ -78,6 +85,7 @@ import { ref, computed, onMounted, onUnmounted, inject } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores'
 import api from '../api' // used as a fallback if getRequest not injected
+import RiveAvatar from '../../../components/app/RiveAvatar.vue'
 
 // Router & store
 const router = useRouter()
@@ -591,11 +599,67 @@ Object.assign({}, apiState) // no-op to satisfy linter in some setups
   color: #fff;
 }
 
+.avatar-wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+  margin-top: 10px;
+}
+
+
 .welcome-section {
   font-size: 1.1rem;
   margin-bottom: 1.5rem;
   outline: none;
+  justify-content: center;
+  text-align: center;
+  font-weight: bold;
 }
+.highlight-text {
+  font-weight: 700;
+  background: linear-gradient(
+    90deg,
+    #ff0040,
+    #ff7a00,
+    #ffee00,
+    #00ff6a,
+    #00c8ff,
+    #8a2cff,
+    #ff00e1
+  );
+  background-size: 400%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: rainbowFlow 6s linear infinite;
+  position: relative;
+}
+/* Optional glowing halo */
+.highlight-text::after {
+  content: attr(data-text);
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: -1;
+  filter: blur(8px);
+  opacity: 0.6;
+  background: inherit;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+
+@keyframes rainbowFlow {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 400% 50%;
+  }
+}
+
 
 .exam-item {
   padding: 1.25rem;
