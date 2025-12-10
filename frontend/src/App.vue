@@ -1,8 +1,6 @@
 <template>
   <transition appear>
-    <printer v-if="false" class="w-full h-screen"></printer>
     <div
-      v-else
       class="font-sans flex flex-col h-full w-full bg-primaryBg dark:bg-gray-900 text-textMedium overflow-auto"
     >
       <div v-if="userStore.isLoading">...</div>

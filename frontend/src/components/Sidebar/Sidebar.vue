@@ -344,7 +344,7 @@
     </div>
   </nav>
 </template>
-); }
+
 
 <script>
 import NotificationDropdown from "@/components/Dropdowns/NotificationDropdown.vue";

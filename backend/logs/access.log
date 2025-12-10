@@ -40606,3 +40606,15 @@
 [0mGET /api [33m401[0m 53.967 ms - 48[0m
 [0mOPTIONS /api/exams/published [32m204[0m 4.116 ms - 0[0m
 [0mGET /api/exams/published [33m401[0m 41.868 ms - 48[0m
+[0mOPTIONS /api/exams/published [32m204[0m 6.941 ms - 0[0m
+[0mGET /api/exams/published [33m401[0m 39.411 ms - 48[0m
+[0mOPTIONS /api/exams/published [32m204[0m 0.810 ms - 0[0m
+[0mGET /api/exams/published [33m401[0m 6.611 ms - 48[0m
+[0mOPTIONS /api/exams/published [32m204[0m 0.389 ms - 0[0m
+[0mGET /api/exams/published [33m401[0m 5.839 ms - 48[0m
+[0mOPTIONS /api/exams/published [32m204[0m 0.460 ms - 0[0m
+[0mGET /api/exams/published [33m401[0m 3.856 ms - 48[0m
+[0mOPTIONS /api/exams/published [32m204[0m 0.639 ms - 0[0m
+[0mOPTIONS /api/exams/published [32m204[0m 1.561 ms - 0[0m
+[0mGET /api/exams/published [33m401[0m 5.651 ms - 48[0m
+[0mGET /api/exams/published [33m401[0m 6.736 ms - 48[0m

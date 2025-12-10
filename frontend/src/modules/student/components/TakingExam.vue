@@ -140,6 +140,7 @@
 import { ref, onMounted, onUnmounted, computed, inject } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../api'
+import studentService from '../service'
 import { get } from '@vueuse/core';
 
 export default {
@@ -393,10 +394,11 @@ export default {
 
     const submitExam = async () => {
       try {
-        await api.submitExam({
+        const response = await studentService.submitExam(postRequest, {
           examId: props.examId,
           answers: answers.value
         })
+        if (response.error) throw new Error(response.message || 'Submit failed')
         speak('Exam submitted successfully')
         router.push('/student/dashboard')
       } catch (error) {
@@ -454,30 +456,25 @@ export default {
     // Lifecycle Hooks
     onMounted(async () => {
       try {
-        // Initialize exam
-        const response = await getRequest({
-          ...api.getExam,
-          url: api.getExam.url.replace(':id', props.examId)
-        })
-        
+        // Initialize exam via helper service
+        const response = await studentService.getExam(getRequest, props.examId)
         if (response.error) {
-          throw new Error(response.error)
+          throw new Error(response.message || 'Failed to load exam')
         }
-        
         exam.value = response
         initSpeechRecognition()
         startTimer()
-        
+
         // Announce exam start
         const startMessage = `Starting ${exam.value.title}. Duration: ${exam.value.duration} minutes. 
           Use voice commands like "Next Question", "Previous Question", or say "Help" for more options.`
         speak(startMessage)
-        
+
         // Set initial focus
         if (examContainer.value) {
           examContainer.value.focus()
         }
-        
+
         // Start with first question
         announceCurrentQuestion()
       } catch (error) {

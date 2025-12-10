@@ -79,6 +79,19 @@ class ExamSubmissionService extends Service {
             return this.errorResponse(error.message, 500);
         }
     }
+
+    async deleteSubmission(submissionId) {
+        try {
+            const submission = await this.repo.getById(submissionId);
+            if (!submission.item) {
+                return this.errorResponse('Submission not found', 404);
+            }
+            const response = await this.repo.delete(submissionId);
+            return this.successResponse(response);
+        } catch (error) {
+            return this.errorResponse(error.message, 500);
+        }
+    }
 }
 
 export default ExamSubmissionService;
