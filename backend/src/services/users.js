@@ -33,6 +33,15 @@ class UsersService extends Service {
       return this.errorResponse(error.message, 500);
     }
   }
+
+  async getAllUsers(filter = {}) {
+    try {
+      const users = await this.repo.getAll(filter)
+      return this.successResponse({ items: users })
+    } catch (error) {
+      return this.errorResponse(error.message, 500)
+    }
+  }
 }
 
 export default UsersService;

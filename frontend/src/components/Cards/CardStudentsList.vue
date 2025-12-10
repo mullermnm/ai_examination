@@ -39,28 +39,19 @@
           </tr>
         </thead>
         <tbody>
-          <tr>
-            <td
-              class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4"
-            >
-              John Doe
-            </td>
-            <td
-              class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4"
-            >
-              <i class="fas fa-circle text-emerald-500 mr-2"></i> Online
-            </td>
+          <tr v-if="loading">
+            <td colspan="2" class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">Loading students...</td>
           </tr>
-          <tr>
-            <td
-              class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4"
-            >
-              Jane Smith
+          <tr v-else-if="students.length === 0">
+            <td colspan="2" class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">No recent students</td>
+          </tr>
+          <tr v-else v-for="(s, idx) in students" :key="s._id || s.id || idx">
+            <td class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
+              {{ s.fullName || s.name || s.userId || 'Unknown' }}
             </td>
-            <td
-              class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4"
-            >
-              <i class="fas fa-circle text-gray-500 mr-2"></i> Offline
+            <td class="border-t-0 px-6 align-middle border-l-0 border-r-0 text-xs whitespace-nowrap p-4">
+              <i :class="['fas fa-circle mr-2', (s.online || s.status === 'online') ? 'text-emerald-500' : 'text-gray-500']" aria-hidden="true"></i>
+              {{ (s.online || s.status === 'online') ? 'Online' : (s.status || 'Offline') }}
             </td>
           </tr>
         </tbody>
@@ -68,3 +59,45 @@
     </div>
   </div>
 </template>
+
+<script setup>
+import { ref, onMounted, inject } from 'vue'
+import teacherApi from '@/modules/teacher/api'
+
+const students = ref([])
+const loading = ref(false)
+const error = ref(null)
+
+const getRequest = inject('getRequest', null)
+
+const fetchStudents = async () => {
+  loading.value = true
+  error.value = null
+  try {
+    if (getRequest && teacherApi && teacherApi.getStudents) {
+      // expected signature getRequest(api)
+      const resp = await getRequest({ ...(teacherApi.getStudents || {}) })
+      // normalize to items/array
+      students.value = resp?.items || resp?.data || resp || []
+    } else if (teacherApi && teacherApi.getStudents && teacherApi.getStudents.url) {
+      const method = (teacherApi.getStudents.method || 'GET').toUpperCase()
+      const res = await fetch(teacherApi.getStudents.url, { method })
+      const json = await res.json()
+      students.value = json.items || json || []
+    } else {
+      const res = await fetch('/users')
+      const json = await res.json()
+      students.value = json.items || json || []
+    }
+  } catch (e) {
+    console.error('Failed to load students', e)
+    error.value = 'Failed to load students'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  fetchStudents()
+})
+</script>
