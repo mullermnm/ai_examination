@@ -61,14 +61,15 @@ export default {
 };
 </script>
 
-<style scoped>
+<style >
 :root {
   --brown: #efe6db; /* light brown background */
   --accent-green: #2f7a5b; /* deep green */
   --accent-blue: #247ba0; /* deep blue */
   --accent-amber: #c48b49; /* warm amber for contrast */
 }
-
+</style>
+<style scoped>
 .landing-root {
   background: var(--brown);
   min-height: 100vh;
