@@ -40618,3 +40618,11 @@
 [0mOPTIONS /api/exams/published [32m204[0m 1.561 ms - 0[0m
 [0mGET /api/exams/published [33m401[0m 5.651 ms - 48[0m
 [0mGET /api/exams/published [33m401[0m 6.736 ms - 48[0m
+[0mOPTIONS /api/users/signin [32m204[0m 3.448 ms - 0[0m
+[0mPOST /api/users/signin [33m404[0m 803.948 ms - 63[0m
+[0mOPTIONS /api/users/signin [32m204[0m 0.663 ms - 0[0m
+[0mPOST /api/users/signin [33m404[0m 18.589 ms - 63[0m
+[0mOPTIONS /api/users/signin [32m204[0m 0.298 ms - 0[0m
+[0mPOST /api/users/signin [33m404[0m 20.887 ms - 63[0m
+[0mOPTIONS /api/users/signin [32m204[0m 7.327 ms - 0[0m
+[0mPOST /api/users/signin [32m200[0m 335.417 ms - 954[0m

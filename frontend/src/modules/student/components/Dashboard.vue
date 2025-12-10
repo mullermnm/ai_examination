@@ -61,7 +61,7 @@
         class="mic-button"
         :class="{ active: isListening }"
         @click="toggleVoiceInput"
-        :aria-pressed="isListening.toString()"
+        :aria-pressed="isListening ? 'true' : 'false'"
         aria-label="Toggle voice input"
       >
         <span class="visually-hidden">Toggle Voice Input</span>
@@ -72,517 +72,231 @@
 </template>
 
 <script setup>
-/*
-  Rewritten StudentDashboard
-  - Robust speech recognition (SpeechRecognition / webkitSpeechRecognition)
-  - speak queue/guard
-  - safe fetch with injected getRequest fallback to api.getPublishedExams.url
-  - cleans up handlers & timers on unmount
-  - keyboard handling
-*/
-
-import { ref, computed, onMounted, onUnmounted, inject } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, inject } from 'vue'
 import { useRouter } from 'vue-router'
 import { useUserStore } from '@/stores'
-import api from '../api' // used as a fallback if getRequest not injected
+import { useVoskVoice } from '@/utils/useVoskVoice'
+import api from '../api'
 import RiveAvatar from '../../../components/app/RiveAvatar.vue'
 
-// Router & store
-const router = useRouter()
-const userStore = useUserStore()
-const studentName = computed(() => userStore.user?.fullName || 'Student')
-
-// Optional injected network helpers (from parent / app)
-const getRequest = inject('getRequest', null)
-const postRequest = inject('postRequest', null)
-
-// DOM refs & reactive state
-const dashboardContainer = ref(null)
-const welcomeMessage = ref(null)
-const micButton = ref(null)
-
-const hasInteracted = ref(false)
-const showExams = ref(false)
-const publishedExams = ref([])
-const currentExamIndex = ref(0)
-const loading = ref(false)
-const error = ref(null)
-const wantsToReload = ref(false)
-const isListening = ref(false)
-const tutorialMode = ref(false)
-
-// timers & recognition
-let welcomeInterval = null
-let welcomeTimeout = null
-let recognition = null
-
-// computed current exam - defined before use
-const currentExam = computed(() => publishedExams.value[currentExamIndex.value] || null)
-
-// TTS guard to prevent overlapping utterances
+// ----------------------------
+// Text-to-Speech Helper
+// ----------------------------
 let speaking = false
+const selectedVoice = ref(null)
+
 const speak = (text) => {
-  try {
-    // If SpeechSynthesis is not supported, just console.log
-    if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
-      // graceful fallback
-      console.info('TTS not supported; text:', text)
-      return
-    }
+  if (!window.speechSynthesis) return console.log(text)
 
-    // cancel existing only if queueing would be a problem; we use guard instead
-    if (speaking) {
-      // optionally cancel current and speak new one. For now, ignore new if speaking.
-      return
-    }
+  if (speaking) return console.log("Already speaking, skipping:", text)
 
-    speaking = true
-    window.speechSynthesis.cancel()
-    const u = new SpeechSynthesisUtterance(text)
-    u.onend = () => { speaking = false }
-    u.onerror = () => { speaking = false }
-    window.speechSynthesis.speak(u)
-  } catch (err) {
-    console.warn('speak() failed:', err)
-    speaking = false
-  }
+  speaking = true
+  const u = new SpeechSynthesisUtterance(text)
+  if (selectedVoice.value) u.voice = selectedVoice.value
+  u.onend = () => (speaking = false)
+  u.onerror = () => (speaking = false)
+
+  // cancel any ongoing speech and play
+  try { window.speechSynthesis.cancel() } catch (e) {}
+  window.speechSynthesis.speak(u)
 }
 
-// --- Welcome message / interval logic ---
-const announceWelcome = () => {
-  if (!hasInteracted.value && !welcomeTimeout) {
-    const message = `${studentName.value}, welcome to the exam platform. Say "Take Exam" to start an exam, "View Progress" to check your performance, or "Help" for a tutorial.`
-    speak(message)
-    // block immediate repeats for 10s
-    welcomeTimeout = setTimeout(() => { welcomeTimeout = null }, 10000)
-  }
-}
+// Initialize TTS voices and pick a preferred voice (english pref).
+const initTTS = async () => {
+  if (!window.speechSynthesis) return
 
-const startWelcomeInterval = () => {
-  // clear any existing
-  if (welcomeInterval) {
-    clearInterval(welcomeInterval)
-    welcomeInterval = null
-  }
-  // initial announcement shortly after mount
-  setTimeout(announceWelcome, 1000)
-  welcomeInterval = setInterval(() => {
-    if (!hasInteracted.value) {
-      announceWelcome()
-    } else {
-      clearInterval(welcomeInterval)
-      welcomeInterval = null
-    }
-  }, 15000)
-}
-
-const resetToWelcome = () => {
-  showExams.value = false
-  hasInteracted.value = false
-  currentExamIndex.value = 0
-  // clear timers and restart welcome
-  if (welcomeTimeout) { clearTimeout(welcomeTimeout); welcomeTimeout = null }
-  if (welcomeInterval) { clearInterval(welcomeInterval); welcomeInterval = null }
-  startWelcomeInterval()
-}
-
-// --- Safe SpeechRecognition initialization ---
-const getSpeechRecognitionConstructor = () => {
-  // handles non-standard vendor prefix
-  return window.SpeechRecognition || window.webkitSpeechRecognition || null
-}
-
-const initSpeechRecognition = () => {
-  const SR = getSpeechRecognitionConstructor()
-  if (!SR) {
-    console.info('Speech recognition not supported in this browser')
-    return
-  }
+  const loadVoices = () => new Promise((resolve) => {
+    const vs = window.speechSynthesis.getVoices()
+    if (vs && vs.length) return resolve(vs)
+    // some browsers populate voices asynchronously
+    window.speechSynthesis.onvoiceschanged = () => resolve(window.speechSynthesis.getVoices())
+    // fallback timeout
+    setTimeout(() => resolve(window.speechSynthesis.getVoices() || []), 700)
+  })
 
   try {
-    // create a new one each init to avoid reusing stale instance
-    recognition = new SR()
-    recognition.continuous = true
-    recognition.interimResults = false // only final results
-    recognition.lang = navigator.language || 'en-US'
-
-    // ensure previous handlers are not attached (defensive)
-    recognition.onresult = null
-    recognition.onerror = null
-    recognition.onend = null
-
-    recognition.onresult = (event) => {
-      // Take the last final result
-      try {
-        const results = event.results
-        const last = results[results.length - 1]
-        const transcript = (last[0]?.transcript || '').trim().toLowerCase()
-        if (transcript) {
-          handleVoiceCommand(transcript)
-        }
-      } catch (e) {
-        console.warn('onresult handling failed', e)
-      }
-    }
-
-    recognition.onerror = (ev) => {
-      console.error('Speech recognition error:', ev)
-      speak('Voice recognition encountered an error. Try again or use the keyboard.')
-      isListening.value = false
-    }
-
-    recognition.onend = () => {
-      // if we expected it to be running and it stopped unexpectedly, update state
-      if (isListening.value) {
-        // do not auto-restart here to avoid loops; user can toggle again
-        isListening.value = false
-      }
-    }
-
-    // start automatically if user has not disabled voice
-    // wrap start in try/catch — starting may throw (e.g. permission denied)
-    try {
-      recognition.start()
-      isListening.value = true
-    } catch (err) {
-      console.warn('Recognition start failed:', err)
-      isListening.value = false
-    }
-  } catch (err) {
-    console.error('initSpeechRecognition failed', err)
-  }
-}
-
-const stopRecognition = () => {
-  try {
-    if (recognition) {
-      recognition.onresult = null
-      recognition.onerror = null
-      recognition.onend = null
-      recognition.stop()
-      isListening.value = false
-    }
+    const voices = await loadVoices()
+    // prefer en voices
+    const preferred = voices.find(v => v.lang && v.lang.toLowerCase().startsWith('en')) || voices[0]
+    if (preferred) selectedVoice.value = preferred
   } catch (e) {
-    console.warn('stopRecognition failed', e)
+    // ignore voice errors
+    selectedVoice.value = null
   }
 }
 
-// Toggle mic button
-const toggleVoiceInput = () => {
-  if (!recognition) {
-    // Try to initialize then start if possible
-    initSpeechRecognition()
-    if (!recognition) {
-      speak('Voice commands are not supported in this browser.')
-      return
-    }
-  }
-
-  try {
-    if (isListening.value) {
-      stopRecognition()
-      speak('Voice commands deactivated')
-    } else {
-      try {
-        recognition.start()
-        isListening.value = true
-        speak('Voice commands activated. Say "Help" for available commands.')
-      } catch (e) {
-        console.warn('Failed to start recognition:', e)
-        speak('Unable to start voice recognition. Please check microphone permissions.')
-      }
-    }
-  } catch (e) {
-    console.warn('toggleVoiceInput error', e)
-  }
-}
-
-// --- Voice command handler ---
+// ----------------------------
+// Voice Command Handler
+// ----------------------------
 const handleVoiceCommand = (command) => {
-  // mark user interaction so welcome stops
   hasInteracted.value = true
-  // basic commands
-  if (command.includes('take exam')) {
-    if (currentExam.value && currentExam.value.id) {
+  const cmd = command.toLowerCase()
+
+  if (cmd.includes('take exam')) {
+    if (currentExam.value?.id) {
       goToExam(currentExam.value.id)
     } else {
       showExams.value = true
       fetchExams()
     }
-  } else if (command.includes('view progress')) {
+  }
+
+  else if (cmd.includes('view progress')) {
     speak('Opening progress view')
     router.push('/student/progress')
-  } else if (command.includes('help')) {
+  }
+
+  else if (cmd.includes('help')) {
     showTutorial()
-  } else if (command.includes('log out') || command.includes('logout')) {
+  }
+
+  else if (cmd.includes('log out') || cmd.includes('logout')) {
     speak('Logging out')
-    // assume userStore has logout
-    if (typeof userStore.logout === 'function') userStore.logout()
+    userStore.logout?.()
     router.push('/login')
-  } else if (command.includes('next exam')) {
+  }
+
+  else if (cmd.includes('next exam')) {
     if (currentExamIndex.value < publishedExams.value.length - 1) {
       currentExamIndex.value++
       announceExam()
-    } else {
-      speak('This is the last exam.')
-    }
-  } else if (command.includes('previous exam') || command.includes('prev exam')) {
+    } else speak('This is the last exam.')
+  }
+
+  else if (cmd.includes('previous exam') || cmd.includes('prev exam')) {
     if (currentExamIndex.value > 0) {
       currentExamIndex.value--
       announceExam()
-    } else {
-      speak('This is the first exam.')
-    }
-  } else if (command.includes('repeat')) {
-    if (tutorialMode.value) {
-      showTutorial()
-    } else {
-      announceExam()
-    }
+    } else speak('This is the first exam.')
+  }
+
+  else if (cmd.includes('repeat')) {
+    announceExam()
+  }
+}
+
+// ----------------------------
+// Vosk Voice Recognition
+// ----------------------------
+const lastTranscript = ref("")
+
+const vosk = useVoskVoice({
+  onResult(text) {
+    lastTranscript.value = text
+    console.log("Voice command recognized:", text)
+  },
+  onError(err) {
+    speak(`ttt Error ${err || "Voice system error."}`)
+  }
+})
+
+watch(lastTranscript, (txt) => {
+  if (txt) handleVoiceCommand(txt)
+})
+
+// expose listening state for the template
+const isListening = vosk.isListening
+
+// ============================
+// Dashboard State
+// ============================
+const router = useRouter()
+const userStore = useUserStore()
+
+const dashboardContainer = ref(null)
+const showExams = ref(false)
+const publishedExams = ref([])
+const currentExamIndex = ref(0)
+const hasInteracted = ref(false)
+const loading = ref(false)
+const error = ref(null)
+
+// computed
+const studentName = computed(() => userStore.user?.fullName || 'Student')
+const currentExam = computed(() => publishedExams.value[currentExamIndex.value] || null)
+
+// ----------------------------
+// Exam Announcement
+// ----------------------------
+const announceExam = () => {
+  if (!currentExam.value) return
+  const e = currentExam.value
+
+  speak(
+    `${e.title}. Course ${e.courseName}. Duration ${e.duration} minutes. 
+     Total marks ${e.totalMarks}. Say "Take Exam" to begin.`
+  )
+}
+
+// ----------------------------
+// Toggle Mic
+// ----------------------------
+const toggleVoiceInput = async () => {
+  if (vosk.isListening.value) {
+    vosk.stop()
+    speak("Voice commands off")
   } else {
-    // unknown command - friendly feedback
-    console.info('Unrecognized voice command:', command)
+    await vosk.start()
+    speak("Voice commands activated")
   }
 }
 
-// --- Tutorial ---
-const showTutorial = () => {
-  tutorialMode.value = true
-  const tutorial = `Welcome to the exam platform tutorial.
-  Say "Take Exam" to start an exam.
-  Say "View Progress" to check your past performance.
-  Say "Help" to hear this tutorial again.
-  Say "Log Out" to exit the application.
-  During exams use "Next Question" or "Previous Question" and "Repeat Question" to hear the question again.`
-  speak(tutorial)
-}
-
-// --- Navigation / Enter handling ---
-const handleEnterAction = async () => {
-  window.speechSynthesis?.cancel()
-  hasInteracted.value = true
-
-  // clear welcome timers
-  if (welcomeInterval) { clearInterval(welcomeInterval); welcomeInterval = null }
-  if (welcomeTimeout) { clearTimeout(welcomeTimeout); welcomeTimeout = null }
-
-  // if error -> try reload exams
-  if (error.value) {
-    error.value = null
-    await fetchExams()
-    return
-  }
-
-  if (!showExams.value) {
-    showExams.value = true
-    await fetchExams()
-    return
-  }
-
-  if (currentExam.value && currentExam.value.id) {
-    goToExam(currentExam.value.id)
-  } else {
-    // nothing to start
-    speak('No exam selected. Use arrow keys to select an exam or say "Take Exam".')
-  }
-}
-
-const handleKeyDown = (e) => {
-  // Prevent key events while confirmation for leaving is active
-  if (wantsToReload.value) {
-    e.preventDefault()
-    if (e.key === 'Enter') {
-      window.removeEventListener('beforeunload', handleBeforeUnload)
-      window.location.reload()
-    } else {
-      wantsToReload.value = false
-      speak('Reload cancelled. Continuing.')
-    }
-    return
-  }
-
-  switch (e.key) {
-    case 'Enter':
-      e.preventDefault()
-      handleEnterAction()
-      break
-    case 'ArrowDown':
-    case 'ArrowRight':
-      if (publishedExams.value.length > 0) {
-        currentExamIndex.value = Math.min(currentExamIndex.value + 1, publishedExams.value.length - 1)
-        announceExam()
-      }
-      break
-    case 'ArrowUp':
-    case 'ArrowLeft':
-      if (publishedExams.value.length > 0) {
-        currentExamIndex.value = Math.max(currentExamIndex.value - 1, 0)
-        announceExam()
-      }
-      break
-    case 'h':
-    case 'H':
-      showTutorial()
-      break
-    default:
-      // ignore others
-      break
-  }
-}
-
-// --- Beforeunload handling ---
-const handleBeforeUnload = (e) => {
-  if (!wantsToReload.value) {
-    // Modern browsers ignore custom messages, but setting returnValue prompts user
-    e.preventDefault()
-    e.returnValue = 'Are you sure you want to leave?'
-    speak('Warning: You are about to leave the exam platform. Press Enter to reload or any other key to stay.')
-    wantsToReload.value = true
-    return e.returnValue
-  }
-}
-
-// --- Fetch exams ---
+// ----------------------------
+// Fetch Exams
+// ----------------------------
 const fetchExams = async () => {
   loading.value = true
   error.value = null
+
   try {
-    let response = null
+    const res = await fetch(api.getPublishedExams.url)
+    const data = await res.json()
 
-    if (getRequest && typeof getRequest === 'function') {
-      // expected signature: getRequest({ ...api.getPublishedExams })
-      response = await getRequest({ ...(api.getPublishedExams || {}) })
-    } else if (api && api.getPublishedExams && api.getPublishedExams.url) {
-      // fallback fetch if api exposes a url
-      const method = (api.getPublishedExams.method || 'GET').toUpperCase()
-      const res = await fetch(api.getPublishedExams.url, { method })
-      response = await res.json()
-    } else {
-      // last-resort: try hitting a conventional endpoint
-      const res = await fetch('/api/published-exams')
-      response = await res.json()
-    }
-
-    // normalize response shape used previously
-    if (response?.error) {
-      throw new Error(response.error || 'Server reported an error')
-    }
-
-    publishedExams.value = response.items || response.data || response.exams || []
+    publishedExams.value = data.items || []
     loading.value = false
 
-    if (publishedExams.value.length > 0) {
-      // start from current index and announce
-      currentExamIndex.value = 0
-      await announceExam()
-    } else {
-      speak('No published exams available at the moment. Please try again later.')
-      resetToWelcome()
+    if (publishedExams.value.length === 0) {
+      speak("No exams available.")
+      return
     }
-  } catch (err) {
-    console.error('Error fetching exams:', err)
-    error.value = 'Failed to load exams. Please try again.'
-    loading.value = false
-    speak('Error loading exams. Please check your internet connection or try again later.')
-    resetToWelcome()
-  }
-}
 
-// announce current exam (returns promise only to allow awaiting in some flows)
-const announceExam = () => {
-  if (!currentExam.value) return
-  const exam = currentExam.value
-  const message = `${exam.title || 'Untitled exam'} for ${exam.courseName || 'unknown course'}. Duration: ${exam.duration ?? 'unknown'} minutes. Total marks: ${exam.totalMarks ?? 'unknown'}. Say "Take Exam" to start this exam.`
-  speak(message)
-}
-
-// sequentially read exams (keeps 10s gap by default)
-const readAllExams = async (gapMs = 10000) => {
-  for (let i = 0; i < publishedExams.value.length; i++) {
-    currentExamIndex.value = i
     announceExam()
-    // wait gapMs (but allow early exit if user interacted)
-    const wait = ms => new Promise(res => {
-      const t = setTimeout(() => { clearTimeout(t); res() }, ms)
-    })
-    await wait(gapMs)
-    if (hasInteracted.value) break
+  } catch (err) {
+    error.value = "Failed to load exams"
+    speak("Error loading exams.")
+    loading.value = false
   }
-  speak('Those are all available exams. Say "Take Exam" to start the current exam, or say "Next Exam" to hear the next one.')
 }
 
-// navigate to exam view
-const goToExam = (examId) => {
-  speak('Starting exam. Good luck!')
-  router.push(`/student/exam/${examId}`)
+// ----------------------------
+// Navigation
+// ----------------------------
+const goToExam = (id) => {
+  speak("Starting exam. Good luck.")
+  router.push(`/student/exam/${id}`)
 }
 
-// --- Lifecycle hooks ---
+// ----------------------------
+// Lifecycle
+// ----------------------------
 onMounted(() => {
-  // init recognition (if available)
-  initSpeechRecognition()
-
-  // attach beforeunload
-  window.addEventListener('beforeunload', handleBeforeUnload)
-
-  // start welcome announcements
-  startWelcomeInterval()
-
-  // focus container for keyboard input
-  if (dashboardContainer.value && dashboardContainer.value.focus) {
-    dashboardContainer.value.focus()
-  }
-
-  // small vibration for taps on mobile
-  if ('vibrate' in navigator) {
-    const clickHandler = () => navigator.vibrate(50)
-    document.addEventListener('click', clickHandler)
-    // store a reference for removal on unmount - reuse named function closure not needed here
-    // we'll remove all click listeners on unmount by referencing this same handler via variable
-    // but since we created it inside here, keep it as property
-    dashboardContainer._mobileVibrateHandler = clickHandler
-  }
+  // autofocus keyboard events
+  dashboardContainer.value?.focus()
+  // initialize TTS and speak welcome message (only if user hasn't interacted yet)
+  initTTS().then(() => {
+    if (!hasInteracted.value) {
+      speak(`Hello, ${studentName.value} — say "Take Exam" to start, or press Enter.`)
+    }
+  })
 })
 
 onUnmounted(() => {
-  // stop recognition & remove handlers
-  try { stopRecognition() } catch (e) { /* ignore */ }
-
-  window.removeEventListener('beforeunload', handleBeforeUnload)
-
-  if (welcomeInterval) { clearInterval(welcomeInterval); welcomeInterval = null }
-  if (welcomeTimeout) { clearTimeout(welcomeTimeout); welcomeTimeout = null }
-
-  // remove mobile vibration handler if present
-  if (dashboardContainer._mobileVibrateHandler) {
-    document.removeEventListener('click', dashboardContainer._mobileVibrateHandler)
-    delete dashboardContainer._mobileVibrateHandler
-  }
+  vosk.stop()
 })
 
 // Expose to template
-const apiState = {
-  dashboardContainer,
-  welcomeMessage,
-  micButton,
-  studentName,
-  hasInteracted,
-  showExams,
-  publishedExams,
-  currentExamIndex,
-  currentExam,
-  loading,
-  error,
-  isListening,
-  handleKeyDown,
-  toggleVoiceInput
-}
-
-Object.assign({}, apiState) // no-op to satisfy linter in some setups
-
-// return refs for template usage
-// In <script setup> everything is directly available, so ensure names exist
 </script>
+
 
 <style scoped>
 .dashboard-container {
