@@ -13,7 +13,9 @@
           </p>
 
           <div class="actions mt-8">
-            <button class="btn-primary">Get started</button>
+            <router-link to="/student">
+              <button class="btn-primary">Get started</button>
+            </router-link>
             <button class="btn-secondary">Learn more</button>
           </div>
         </div>
